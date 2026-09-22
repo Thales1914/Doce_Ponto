@@ -3,6 +3,7 @@ const AppError = require('../utils/AppError');
 const { gerarNumeroPedido } = require('../utils/numeroPedido');
 const { paginated, offset } = require('../utils/pagination');
 const { aplicarMovimentacao } = require('./estoqueService');
+const financeiroService = require('./financeiroService');
 const produtoModel = require('../models/produtoModel');
 const clienteModel = require('../models/clienteModel');
 const pedidoModel = require('../models/pedidoModel');
@@ -108,7 +109,8 @@ async function detalhar(id) {
 /**
  * Altera o status validando a transição. Numa única transação:
  *  - confirmado: baixa o estoque dos itens (saída) — recusa se faltar saldo
- *  - cancelado:  estorna o estoque (entrada) se já tinha sido baixado
+ *  - confirmado: lança a entrada pendente do pedido no financeiro
+ *  - cancelado:  estorna o estoque (entrada) se já tinha sido baixado e cancela a entrada pendente
  *  - registra o histórico da alteração
  */
 async function alterarStatus(id, { status: novo, observacao }, adminId) {
@@ -136,6 +138,9 @@ async function alterarStatus(id, { status: novo, observacao }, adminId) {
         });
       }
       estoqueBaixado = true;
+      await financeiroService.lancarEntradaPedido(client, {
+        pedidoId: id, numeroPedido: pedido.numero_pedido, valor: totalDe(itens),
+      });
     } else if (novo === 'cancelado' && pedido.estoque_baixado) {
       const itens = await pedidoModel.findItens(client, id);
       for (const item of [...itens].sort((a, b) => a.produto_id - b.produto_id)) {
@@ -146,6 +151,7 @@ async function alterarStatus(id, { status: novo, observacao }, adminId) {
       }
       estoqueBaixado = false;
     }
+    if (novo === 'cancelado') await financeiroService.cancelarEntradaPedido(client, id);
 
     const atualizado = await pedidoModel.updateStatus(client, id, { status: novo, estoqueBaixado });
     await pedidoModel.insertHistorico(client, {

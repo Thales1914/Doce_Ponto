@@ -6,5 +6,8 @@ router.use('/auth', require('./authRoutes'));
 router.use('/produtos', require('./produtoRoutes'));
 router.use('/estoque', require('./estoqueRoutes'));
 router.use('/pedidos', require('./pedidoRoutes'));
+router.use('/restaurantes', require('./restauranteRoutes'));
+router.use('/vendas-restaurantes', require('./vendaRestauranteRoutes'));
+router.use('/financeiro', require('./financeiroRoutes'));
 
 module.exports = router;
