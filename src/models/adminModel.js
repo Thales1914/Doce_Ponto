@@ -21,7 +21,7 @@ const create = async (db, { nome, email, senhaHash }) => {
 };
 
 const count = async (db) => {
-  const { rows } = await db.query('SELECT count(*) AS total FROM usuarios_admin');
+  const { rows } = await db.query('SELECT count(*)::integer AS total FROM usuarios_admin');
   return rows[0].total;
 };
 

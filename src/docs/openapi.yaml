@@ -1,46 +1,34 @@
 openapi: 3.0.3
 info:
-  title: API Sistema de Gestão de Doces
+  title: DocePonto — Backend, banco e autenticação
   version: 1.0.0
-  description: |
-    API para gestão de produção e venda de doces: produtos e estoque, pedidos de clientes,
-    vendas para restaurantes e financeiro.
-
-    **Acesso**
-    - **Administradora**: `POST /auth/login` retorna um JWT; envie `Authorization: Bearer <token>` nas rotas protegidas (cadeado).
-    - **Cliente**: sem login. Cria pedidos e consulta o andamento pelo número do pedido (rotas marcadas como públicas).
-
-    **Erros** seguem sempre `{ "erro": { "codigo", "mensagem", "detalhes"? } }`.
-    **Listagens paginadas** retornam `{ "data": [...], "meta": { "page", "limit", "total", "total_paginas" } }`.
-    **Valores monetários** são números com 2 casas decimais; **datas** de filtro usam `AAAA-MM-DD`.
+  description: "Fase 2 (21/09 a 27/09/2026): API Express, PostgreSQL e
+    autenticação administrativa. Faça login e envie Authorization: Bearer
+    <token> para acessar /auth/me. Erros retornam { erro: { codigo, mensagem,
+    detalhes? } }. Não há cadastro público de administradores."
 servers:
   - url: /api
 tags:
   - name: Autenticação
-  - name: Produtos
-  - name: Estoque
-  - name: Pedidos (cliente)
-    description: Endpoints públicos
-  - name: Pedidos (administração)
-  - name: Restaurantes
-  - name: Vendas para restaurantes
-  - name: Financeiro
-  - name: Dashboard
-
 paths:
   /health:
     get:
       summary: Verificação de saúde da API
       responses:
-        '200':
+        "200":
           description: API no ar
           content:
             application/json:
-              schema: { type: object, properties: { status: { type: string, example: ok } } }
-
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: ok
   /auth/login:
     post:
-      tags: [Autenticação]
+      tags:
+        - Autenticação
       summary: Login da administradora
       requestBody:
         required: true
@@ -48,639 +36,85 @@ paths:
           application/json:
             schema:
               type: object
-              required: [email, senha]
+              required:
+                - email
+                - senha
               properties:
-                email: { type: string, format: email, example: admin@doces.local }
-                senha: { type: string }
+                email:
+                  type: string
+                  format: email
+                  example: admin@doces.local
+                  maxLength: 255
+                senha:
+                  type: string
+                  minLength: 1
+                  maxLength: 72
+                  description: Máximo de 72 bytes em UTF-8.
       responses:
-        '200':
+        "200":
           description: Token JWT
           content:
             application/json:
               schema:
                 type: object
                 properties:
-                  token: { type: string }
-                  tipo: { type: string, example: Bearer }
-                  expira_em: { type: string, example: 8h }
-                  admin: { $ref: '#/components/schemas/Admin' }
-        '400': { $ref: '#/components/responses/Validacao' }
-        '401': { $ref: '#/components/responses/NaoAutenticado' }
-        '429': { $ref: '#/components/responses/MuitasRequisicoes' }
+                  token:
+                    type: string
+                  tipo:
+                    type: string
+                    example: Bearer
+                  expira_em:
+                    type: string
+                    example: 8h
+                  admin:
+                    $ref: "#/components/schemas/Admin"
+        "400":
+          $ref: "#/components/responses/Validacao"
+        "401":
+          $ref: "#/components/responses/NaoAutenticado"
+        "429":
+          $ref: "#/components/responses/MuitasRequisicoes"
   /auth/me:
     get:
-      tags: [Autenticação]
+      tags:
+        - Autenticação
       summary: Dados da administradora autenticada
-      security: [{ bearerAuth: [] }]
+      security:
+        - bearerAuth: []
       responses:
-        '200':
+        "200":
           description: OK
-          content: { application/json: { schema: { $ref: '#/components/schemas/Admin' } } }
-        '401': { $ref: '#/components/responses/NaoAutenticado' }
-
-  /produtos:
-    get:
-      tags: [Produtos]
-      summary: Lista produtos
-      description: |
-        **Público**: retorna só produtos ativos (`id`, `nome`, `descricao`, `preco`).
-        **Com token da administradora**: retorna todos os campos, inclusive inativos e saldo de estoque.
-      parameters:
-        - { name: busca, in: query, schema: { type: string }, description: Filtra por nome }
-        - { name: ativo, in: query, schema: { type: boolean }, description: Somente administradora }
-      responses:
-        '200':
-          description: Lista de produtos
-          content:
-            application/json:
-              schema: { type: array, items: { $ref: '#/components/schemas/Produto' } }
-    post:
-      tags: [Produtos]
-      summary: Cria produto
-      description: Se `quantidade_disponivel` for maior que zero, gera movimentação de entrada "Estoque inicial".
-      security: [{ bearerAuth: [] }]
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [nome, preco]
-              properties:
-                nome: { type: string, example: Brigadeiro }
-                descricao: { type: string, nullable: true }
-                preco: { type: number, example: 3.5 }
-                quantidade_disponivel: { type: integer, default: 0 }
-                ativo: { type: boolean, default: true }
-      responses:
-        '201':
-          description: Criado
-          content: { application/json: { schema: { $ref: '#/components/schemas/Produto' } } }
-        '400': { $ref: '#/components/responses/Validacao' }
-        '401': { $ref: '#/components/responses/NaoAutenticado' }
-  /produtos/{id}:
-    parameters:
-      - { $ref: '#/components/parameters/Id' }
-    get:
-      tags: [Produtos]
-      summary: Detalha produto
-      security: [{ bearerAuth: [] }]
-      responses:
-        '200':
-          description: OK
-          content: { application/json: { schema: { $ref: '#/components/schemas/Produto' } } }
-        '404': { $ref: '#/components/responses/NaoEncontrado' }
-    put:
-      tags: [Produtos]
-      summary: Atualiza produto
-      description: O saldo não pode ser alterado aqui — use `POST /estoque/movimentacao`.
-      security: [{ bearerAuth: [] }]
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                nome: { type: string }
-                descricao: { type: string, nullable: true }
-                preco: { type: number }
-                ativo: { type: boolean }
-      responses:
-        '200':
-          description: OK
-          content: { application/json: { schema: { $ref: '#/components/schemas/Produto' } } }
-        '400': { $ref: '#/components/responses/Validacao' }
-        '404': { $ref: '#/components/responses/NaoEncontrado' }
-    delete:
-      tags: [Produtos]
-      summary: Remove produto (exclusão lógica — marca como inativo)
-      security: [{ bearerAuth: [] }]
-      responses:
-        '204': { description: Removido }
-        '404': { $ref: '#/components/responses/NaoEncontrado' }
-
-  /estoque/movimentacao:
-    post:
-      tags: [Estoque]
-      summary: Registra entrada, saída ou ajuste de estoque
-      description: |
-        - `entrada`: soma `quantidade` ao saldo.
-        - `saida`: subtrai `quantidade`; **409 `ESTOQUE_INSUFICIENTE`** se maior que o saldo.
-        - `ajuste`: define o saldo como `quantidade` (contagem física); `motivo` obrigatório.
-      security: [{ bearerAuth: [] }]
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [produto_id, tipo, quantidade]
-              properties:
-                produto_id: { type: integer }
-                tipo: { type: string, enum: [entrada, saida, ajuste] }
-                quantidade: { type: integer }
-                motivo: { type: string }
-      responses:
-        '201':
-          description: Movimentação registrada
-          content: { application/json: { schema: { $ref: '#/components/schemas/Movimentacao' } } }
-        '400': { $ref: '#/components/responses/Validacao' }
-        '404': { $ref: '#/components/responses/NaoEncontrado' }
-        '409': { $ref: '#/components/responses/EstoqueInsuficiente' }
-  /estoque/movimentacoes:
-    get:
-      tags: [Estoque]
-      summary: Histórico de movimentações
-      security: [{ bearerAuth: [] }]
-      parameters:
-        - { name: produto_id, in: query, schema: { type: integer } }
-        - { name: tipo, in: query, schema: { type: string, enum: [entrada, saida, ajuste] } }
-        - { $ref: '#/components/parameters/Inicio' }
-        - { $ref: '#/components/parameters/Fim' }
-        - { $ref: '#/components/parameters/Page' }
-        - { $ref: '#/components/parameters/Limit' }
-      responses:
-        '200':
-          description: Página de movimentações
           content:
             application/json:
               schema:
-                allOf:
-                  - { $ref: '#/components/schemas/Paginacao' }
-                  - type: object
-                    properties:
-                      data: { type: array, items: { $ref: '#/components/schemas/Movimentacao' } }
-
-  /pedidos:
-    post:
-      tags: [Pedidos (cliente)]
-      summary: Cria pedido (público)
-      description: |
-        Sem login. O cliente é identificado pelo `contato` (reutilizado se já existir).
-        Retorna `numero_pedido`, o código para acompanhamento. O estoque só é conferido quando a
-        administradora confirma o pedido. Itens repetidos do mesmo produto são somados.
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [cliente, itens]
-              properties:
-                cliente:
-                  type: object
-                  required: [nome, contato]
-                  properties:
-                    nome: { type: string, example: Maria Silva }
-                    contato: { type: string, example: '(11) 99999-0000' }
-                itens:
-                  type: array
-                  minItems: 1
-                  items:
-                    type: object
-                    required: [produto_id, quantidade]
-                    properties:
-                      produto_id: { type: integer }
-                      quantidade: { type: integer, minimum: 1 }
-                observacoes: { type: string, nullable: true }
-      responses:
-        '201':
-          description: Pedido criado
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  numero_pedido: { type: string, example: PED-7K3M9QXA }
-                  status: { type: string, example: solicitado }
-                  total: { type: number }
-                  itens: { type: array, items: { $ref: '#/components/schemas/ItemPedido' } }
-                  observacoes: { type: string, nullable: true }
-                  criado_em: { type: string, format: date-time }
-                  mensagem: { type: string }
-        '400': { $ref: '#/components/responses/Validacao' }
-        '429': { $ref: '#/components/responses/MuitasRequisicoes' }
-    get:
-      tags: [Pedidos (administração)]
-      summary: Lista pedidos com filtros
-      security: [{ bearerAuth: [] }]
-      parameters:
-        - { name: status, in: query, schema: { $ref: '#/components/schemas/StatusPedido' } }
-        - { name: cliente_id, in: query, schema: { type: integer } }
-        - { name: cliente, in: query, schema: { type: string }, description: Busca por nome ou contato }
-        - { $ref: '#/components/parameters/Inicio' }
-        - { $ref: '#/components/parameters/Fim' }
-        - { $ref: '#/components/parameters/Page' }
-        - { $ref: '#/components/parameters/Limit' }
-      responses:
-        '200':
-          description: Página de pedidos
-          content:
-            application/json:
-              schema:
-                allOf:
-                  - { $ref: '#/components/schemas/Paginacao' }
-                  - type: object
-                    properties:
-                      data:
-                        type: array
-                        items:
-                          type: object
-                          properties:
-                            id: { type: integer }
-                            numero_pedido: { type: string }
-                            status: { $ref: '#/components/schemas/StatusPedido' }
-                            cliente_id: { type: integer }
-                            cliente_nome: { type: string }
-                            cliente_contato: { type: string }
-                            total: { type: number }
-                            quantidade_itens: { type: integer }
-                            observacoes: { type: string, nullable: true }
-                            criado_em: { type: string, format: date-time }
-                            atualizado_em: { type: string, format: date-time }
-        '401': { $ref: '#/components/responses/NaoAutenticado' }
-  /pedidos/{numero}:
-    get:
-      tags: [Pedidos (cliente)]
-      summary: Acompanha pedido pelo número (público)
-      description: Retorna status atual e histórico simplificado. Não expõe dados pessoais nem notas internas.
-      parameters:
-        - { name: numero, in: path, required: true, schema: { type: string, example: PED-7K3M9QXA } }
-      responses:
-        '200':
-          description: Andamento do pedido
-          content: { application/json: { schema: { $ref: '#/components/schemas/PedidoPublico' } } }
-        '400': { $ref: '#/components/responses/Validacao' }
-        '404': { $ref: '#/components/responses/NaoEncontrado' }
-        '429': { $ref: '#/components/responses/MuitasRequisicoes' }
-  /pedidos/{numero}/observacoes:
-    post:
-      tags: [Pedidos (cliente)]
-      summary: Inclui observação adicional (público)
-      description: Não é possível em pedidos `entregue` ou `cancelado` (409 `PEDIDO_FINALIZADO`).
-      parameters:
-        - { name: numero, in: path, required: true, schema: { type: string, example: PED-7K3M9QXA } }
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [texto]
-              properties:
-                texto: { type: string, maxLength: 1000 }
-      responses:
-        '201':
-          description: Observação registrada
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  texto: { type: string }
-                  criado_em: { type: string, format: date-time }
-        '400': { $ref: '#/components/responses/Validacao' }
-        '404': { $ref: '#/components/responses/NaoEncontrado' }
-        '409': { description: Pedido finalizado, content: { application/json: { schema: { $ref: '#/components/schemas/Erro' } } } }
-  /pedidos/{id}/detalhes:
-    get:
-      tags: [Pedidos (administração)]
-      summary: Detalha pedido (cliente, itens, histórico completo)
-      security: [{ bearerAuth: [] }]
-      parameters:
-        - { $ref: '#/components/parameters/Id' }
-      responses:
-        '200':
-          description: OK
-          content: { application/json: { schema: { $ref: '#/components/schemas/PedidoAdmin' } } }
-        '404': { $ref: '#/components/responses/NaoEncontrado' }
-  /pedidos/{id}/status:
-    put:
-      tags: [Pedidos (administração)]
-      summary: Altera o status do pedido
-      description: |
-        Fluxo: `solicitado → confirmado → em_producao → pronto → entregue`; `cancelado` é possível até antes de `entregue`.
-        Outras transições retornam 409 `TRANSICAO_INVALIDA`. Toda alteração grava histórico.
-
-        - **confirmado**: baixa o estoque (movimentação de saída; 409 `ESTOQUE_INSUFICIENTE` se faltar) e lança entrada pendente no financeiro.
-        - **cancelado**: se já havia baixa, estorna o estoque (entrada) e cancela a entrada financeira pendente.
-      security: [{ bearerAuth: [] }]
-      parameters:
-        - { $ref: '#/components/parameters/Id' }
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [status]
-              properties:
-                status: { $ref: '#/components/schemas/StatusPedido' }
-                observacao: { type: string, description: Nota interna (não aparece para o cliente) }
-      responses:
-        '200':
-          description: Pedido atualizado
-          content: { application/json: { schema: { $ref: '#/components/schemas/PedidoAdmin' } } }
-        '400': { $ref: '#/components/responses/Validacao' }
-        '404': { $ref: '#/components/responses/NaoEncontrado' }
-        '409': { description: Transição inválida ou estoque insuficiente, content: { application/json: { schema: { $ref: '#/components/schemas/Erro' } } } }
-
-  /restaurantes:
-    get:
-      tags: [Restaurantes]
-      summary: Lista restaurantes
-      security: [{ bearerAuth: [] }]
-      parameters:
-        - { name: busca, in: query, schema: { type: string } }
-      responses:
-        '200':
-          description: OK
-          content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/Restaurante' } } } }
-    post:
-      tags: [Restaurantes]
-      summary: Cadastra restaurante
-      security: [{ bearerAuth: [] }]
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [nome]
-              properties:
-                nome: { type: string }
-                contato: { type: string, nullable: true }
-      responses:
-        '201':
-          description: Criado
-          content: { application/json: { schema: { $ref: '#/components/schemas/Restaurante' } } }
-        '400': { $ref: '#/components/responses/Validacao' }
-  /restaurantes/{id}:
-    put:
-      tags: [Restaurantes]
-      summary: Atualiza restaurante
-      security: [{ bearerAuth: [] }]
-      parameters:
-        - { $ref: '#/components/parameters/Id' }
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                nome: { type: string }
-                contato: { type: string, nullable: true }
-      responses:
-        '200':
-          description: OK
-          content: { application/json: { schema: { $ref: '#/components/schemas/Restaurante' } } }
-        '404': { $ref: '#/components/responses/NaoEncontrado' }
-
-  /vendas-restaurantes:
-    get:
-      tags: [Vendas para restaurantes]
-      summary: Lista vendas para restaurantes
-      security: [{ bearerAuth: [] }]
-      parameters:
-        - { name: restaurante_id, in: query, schema: { type: integer } }
-        - { name: status_pagamento, in: query, schema: { type: string, enum: [pendente, recebido] } }
-        - { $ref: '#/components/parameters/Inicio' }
-        - { $ref: '#/components/parameters/Fim' }
-        - { $ref: '#/components/parameters/Page' }
-        - { $ref: '#/components/parameters/Limit' }
-      responses:
-        '200':
-          description: Página de vendas
-          content:
-            application/json:
-              schema:
-                allOf:
-                  - { $ref: '#/components/schemas/Paginacao' }
-                  - type: object
-                    properties:
-                      data: { type: array, items: { $ref: '#/components/schemas/VendaRestaurante' } }
-    post:
-      tags: [Vendas para restaurantes]
-      summary: Registra venda para restaurante
-      description: |
-        A entrega já é venda efetiva. Numa única transação: registra a venda, baixa o estoque
-        (409 `ESTOQUE_INSUFICIENTE` se faltar) e lança entrada **pendente** no financeiro.
-        Sem `valor_total`, usa preço do produto × quantidade.
-      security: [{ bearerAuth: [] }]
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [restaurante_id, produto_id, quantidade]
-              properties:
-                restaurante_id: { type: integer }
-                produto_id: { type: integer }
-                quantidade: { type: integer, minimum: 1 }
-                valor_total: { type: number }
-      responses:
-        '201':
-          description: Venda registrada
-          content: { application/json: { schema: { $ref: '#/components/schemas/VendaRestaurante' } } }
-        '400': { $ref: '#/components/responses/Validacao' }
-        '404': { $ref: '#/components/responses/NaoEncontrado' }
-        '409': { $ref: '#/components/responses/EstoqueInsuficiente' }
-  /vendas-restaurantes/{id}/pagamento:
-    put:
-      tags: [Vendas para restaurantes]
-      summary: Marca a venda como recebida/pendente
-      description: Sincroniza a entrada financeira correspondente. Ao receber, `data` (padrão hoje) vira a data do recebimento.
-      security: [{ bearerAuth: [] }]
-      parameters:
-        - { $ref: '#/components/parameters/Id' }
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [status_pagamento]
-              properties:
-                status_pagamento: { type: string, enum: [pendente, recebido] }
-                forma: { type: string, example: pix }
-                data: { type: string, format: date }
-      responses:
-        '200':
-          description: OK
-          content: { application/json: { schema: { $ref: '#/components/schemas/VendaRestaurante' } } }
-        '404': { $ref: '#/components/responses/NaoEncontrado' }
-
-  /financeiro/entradas:
-    get:
-      tags: [Financeiro]
-      summary: Lista receitas (entradas)
-      description: Além da página, retorna `totais` (recebido/pendente/cancelado) do filtro aplicado.
-      security: [{ bearerAuth: [] }]
-      parameters:
-        - { name: status, in: query, schema: { type: string, enum: [pendente, recebido, cancelado] } }
-        - { name: origem, in: query, schema: { type: string, enum: [pedido, venda_restaurante, manual] } }
-        - { $ref: '#/components/parameters/Inicio' }
-        - { $ref: '#/components/parameters/Fim' }
-        - { $ref: '#/components/parameters/Page' }
-        - { $ref: '#/components/parameters/Limit' }
-      responses:
-        '200':
-          description: Página de entradas
-          content:
-            application/json:
-              schema:
-                allOf:
-                  - { $ref: '#/components/schemas/Paginacao' }
-                  - type: object
-                    properties:
-                      data: { type: array, items: { $ref: '#/components/schemas/Entrada' } }
-                      totais:
-                        type: object
-                        properties:
-                          recebido: { type: number }
-                          pendente: { type: number }
-                          cancelado: { type: number }
-    post:
-      tags: [Financeiro]
-      summary: Lança receita manual
-      security: [{ bearerAuth: [] }]
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [descricao, valor]
-              properties:
-                descricao: { type: string }
-                valor: { type: number }
-                forma: { type: string }
-                status: { type: string, enum: [pendente, recebido], default: recebido }
-                data: { type: string, format: date }
-      responses:
-        '201':
-          description: Criada
-          content: { application/json: { schema: { $ref: '#/components/schemas/Entrada' } } }
-        '400': { $ref: '#/components/responses/Validacao' }
-  /financeiro/entradas/{id}/status:
-    put:
-      tags: [Financeiro]
-      summary: Marca entrada como recebida/pendente
-      description: Entradas canceladas não podem ser alteradas (409 `ENTRADA_CANCELADA`). Se vier de venda a restaurante, a venda acompanha.
-      security: [{ bearerAuth: [] }]
-      parameters:
-        - { $ref: '#/components/parameters/Id' }
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [status]
-              properties:
-                status: { type: string, enum: [pendente, recebido] }
-                forma: { type: string }
-                data: { type: string, format: date }
-      responses:
-        '200':
-          description: OK
-          content: { application/json: { schema: { $ref: '#/components/schemas/Entrada' } } }
-        '404': { $ref: '#/components/responses/NaoEncontrado' }
-        '409': { description: Entrada cancelada, content: { application/json: { schema: { $ref: '#/components/schemas/Erro' } } } }
-  /financeiro/saidas:
-    get:
-      tags: [Financeiro]
-      summary: Lista despesas (saídas)
-      description: Além da página, retorna `totais.valor` do filtro aplicado.
-      security: [{ bearerAuth: [] }]
-      parameters:
-        - { name: categoria, in: query, schema: { type: string } }
-        - { $ref: '#/components/parameters/Inicio' }
-        - { $ref: '#/components/parameters/Fim' }
-        - { $ref: '#/components/parameters/Page' }
-        - { $ref: '#/components/parameters/Limit' }
-      responses:
-        '200':
-          description: Página de saídas
-          content:
-            application/json:
-              schema:
-                allOf:
-                  - { $ref: '#/components/schemas/Paginacao' }
-                  - type: object
-                    properties:
-                      data: { type: array, items: { $ref: '#/components/schemas/Saida' } }
-                      totais: { type: object, properties: { valor: { type: number } } }
-    post:
-      tags: [Financeiro]
-      summary: Lança despesa
-      security: [{ bearerAuth: [] }]
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [descricao, valor]
-              properties:
-                descricao: { type: string }
-                categoria: { type: string, example: insumos }
-                valor: { type: number }
-                data: { type: string, format: date }
-      responses:
-        '201':
-          description: Criada
-          content: { application/json: { schema: { $ref: '#/components/schemas/Saida' } } }
-        '400': { $ref: '#/components/responses/Validacao' }
-
-  /dashboard/resumo:
-    get:
-      tags: [Dashboard]
-      summary: Visão consolidada
-      description: |
-        Período padrão: do dia 1º do mês corrente até hoje. Vendas, recebimentos, despesas e pedidos por status
-        respeitam o período; **pendências** e **estoque** são posição atual.
-      security: [{ bearerAuth: [] }]
-      parameters:
-        - { $ref: '#/components/parameters/Inicio' }
-        - { $ref: '#/components/parameters/Fim' }
-      responses:
-        '200':
-          description: Resumo
-          content: { application/json: { schema: { $ref: '#/components/schemas/Dashboard' } } }
-        '400': { $ref: '#/components/responses/Validacao' }
-
+                $ref: "#/components/schemas/Admin"
+        "401":
+          $ref: "#/components/responses/NaoAutenticado"
 components:
   securitySchemes:
-    bearerAuth: { type: http, scheme: bearer, bearerFormat: JWT }
-
-  parameters:
-    Id: { name: id, in: path, required: true, schema: { type: integer } }
-    Inicio: { name: inicio, in: query, schema: { type: string, format: date }, description: Data inicial (AAAA-MM-DD) }
-    Fim: { name: fim, in: query, schema: { type: string, format: date }, description: Data final (AAAA-MM-DD) }
-    Page: { name: page, in: query, schema: { type: integer, minimum: 1, default: 1 } }
-    Limit: { name: limit, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 20 } }
-
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
   responses:
     Validacao:
       description: Dados de entrada inválidos
-      content: { application/json: { schema: { $ref: '#/components/schemas/Erro' } } }
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Erro"
     NaoAutenticado:
       description: Token ausente, inválido ou expirado
-      content: { application/json: { schema: { $ref: '#/components/schemas/Erro' } } }
-    NaoEncontrado:
-      description: Recurso não encontrado
-      content: { application/json: { schema: { $ref: '#/components/schemas/Erro' } } }
-    EstoqueInsuficiente:
-      description: Estoque insuficiente (`ESTOQUE_INSUFICIENTE`)
-      content: { application/json: { schema: { $ref: '#/components/schemas/Erro' } } }
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Erro"
     MuitasRequisicoes:
       description: Limite de requisições excedido
-      content: { application/json: { schema: { $ref: '#/components/schemas/Erro' } } }
-
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Erro"
   schemas:
     Erro:
       type: object
@@ -688,204 +122,30 @@ components:
         erro:
           type: object
           properties:
-            codigo: { type: string, example: REQUISICAO_INVALIDA }
-            mensagem: { type: string }
+            codigo:
+              type: string
+              example: REQUISICAO_INVALIDA
+            mensagem:
+              type: string
             detalhes:
               type: array
               items:
                 type: object
                 properties:
-                  local: { type: string, example: body }
-                  campo: { type: string, example: itens.0.quantidade }
-                  mensagem: { type: string }
-    Paginacao:
-      type: object
-      properties:
-        meta:
-          type: object
-          properties:
-            page: { type: integer }
-            limit: { type: integer }
-            total: { type: integer }
-            total_paginas: { type: integer }
+                  local:
+                    type: string
+                    example: body
+                  campo:
+                    type: string
+                    example: email
+                  mensagem:
+                    type: string
     Admin:
       type: object
       properties:
-        id: { type: integer }
-        nome: { type: string }
-        email: { type: string }
-    StatusPedido:
-      type: string
-      enum: [solicitado, confirmado, em_producao, pronto, entregue, cancelado]
-    Produto:
-      type: object
-      properties:
-        id: { type: integer }
-        nome: { type: string }
-        descricao: { type: string, nullable: true }
-        preco: { type: number }
-        quantidade_disponivel: { type: integer, description: Somente na visão da administradora }
-        ativo: { type: boolean, description: Somente na visão da administradora }
-        criado_em: { type: string, format: date-time }
-        atualizado_em: { type: string, format: date-time }
-    Movimentacao:
-      type: object
-      properties:
-        id: { type: integer }
-        produto_id: { type: integer }
-        produto_nome: { type: string }
-        tipo: { type: string, enum: [entrada, saida, ajuste] }
-        quantidade: { type: integer }
-        saldo_anterior: { type: integer }
-        saldo_posterior: { type: integer }
-        motivo: { type: string, nullable: true }
-        pedido_id: { type: integer, nullable: true }
-        venda_restaurante_id: { type: integer, nullable: true }
-        criado_em: { type: string, format: date-time }
-    ItemPedido:
-      type: object
-      properties:
-        produto_id: { type: integer }
-        produto_nome: { type: string }
-        quantidade: { type: integer }
-        preco_unitario: { type: number }
-        subtotal: { type: number }
-    PedidoPublico:
-      type: object
-      properties:
-        numero_pedido: { type: string }
-        status: { $ref: '#/components/schemas/StatusPedido' }
-        status_descricao: { type: string }
-        criado_em: { type: string, format: date-time }
-        atualizado_em: { type: string, format: date-time }
-        itens: { type: array, items: { $ref: '#/components/schemas/ItemPedido' } }
-        total: { type: number }
-        observacoes: { type: string, nullable: true }
-        observacoes_adicionais:
-          type: array
-          items: { type: object, properties: { texto: { type: string }, criado_em: { type: string, format: date-time } } }
-        historico:
-          type: array
-          items:
-            type: object
-            properties:
-              status: { $ref: '#/components/schemas/StatusPedido' }
-              status_descricao: { type: string }
-              data: { type: string, format: date-time }
-    PedidoAdmin:
-      type: object
-      properties:
-        id: { type: integer }
-        numero_pedido: { type: string }
-        status: { $ref: '#/components/schemas/StatusPedido' }
-        observacoes: { type: string, nullable: true }
-        criado_em: { type: string, format: date-time }
-        atualizado_em: { type: string, format: date-time }
-        cliente:
-          type: object
-          properties: { id: { type: integer }, nome: { type: string }, contato: { type: string } }
-        itens: { type: array, items: { $ref: '#/components/schemas/ItemPedido' } }
-        total: { type: number }
-        historico:
-          type: array
-          items:
-            type: object
-            properties:
-              status_anterior: { $ref: '#/components/schemas/StatusPedido' }
-              status_novo: { $ref: '#/components/schemas/StatusPedido' }
-              observacao: { type: string, nullable: true }
-              admin_id: { type: integer, nullable: true }
-              admin_nome: { type: string, nullable: true }
-              criado_em: { type: string, format: date-time }
-        observacoes_adicionais:
-          type: array
-          items: { type: object, properties: { texto: { type: string }, criado_em: { type: string, format: date-time } } }
-    Restaurante:
-      type: object
-      properties:
-        id: { type: integer }
-        nome: { type: string }
-        contato: { type: string, nullable: true }
-        criado_em: { type: string, format: date-time }
-    VendaRestaurante:
-      type: object
-      properties:
-        id: { type: integer }
-        restaurante_id: { type: integer }
-        restaurante_nome: { type: string }
-        produto_id: { type: integer }
-        produto_nome: { type: string }
-        quantidade: { type: integer }
-        valor_total: { type: number }
-        status_pagamento: { type: string, enum: [pendente, recebido] }
-        criado_em: { type: string, format: date-time }
-        entrada_financeira_id: { type: integer, description: Presente ao registrar e ao atualizar pagamento }
-    Entrada:
-      type: object
-      properties:
-        id: { type: integer }
-        origem: { type: string, enum: [pedido, venda_restaurante, manual] }
-        pedido_id: { type: integer, nullable: true }
-        numero_pedido: { type: string, nullable: true }
-        venda_restaurante_id: { type: integer, nullable: true }
-        restaurante_nome: { type: string, nullable: true }
-        descricao: { type: string, nullable: true }
-        valor: { type: number }
-        forma: { type: string, nullable: true }
-        status: { type: string, enum: [pendente, recebido, cancelado] }
-        data: { type: string, format: date }
-        criado_em: { type: string, format: date-time }
-    Saida:
-      type: object
-      properties:
-        id: { type: integer }
-        descricao: { type: string }
-        categoria: { type: string, nullable: true }
-        valor: { type: number }
-        data: { type: string, format: date }
-        criado_em: { type: string, format: date-time }
-    Dashboard:
-      type: object
-      properties:
-        periodo: { type: object, properties: { inicio: { type: string, format: date }, fim: { type: string, format: date } } }
-        vendas:
-          type: object
-          properties:
-            total: { type: number }
-            pedidos: { $ref: '#/components/schemas/QuantidadeValor' }
-            restaurantes: { $ref: '#/components/schemas/QuantidadeValor' }
-            por_dia:
-              type: array
-              items: { type: object, properties: { data: { type: string, format: date }, valor: { type: number } } }
-        recebimentos: { $ref: '#/components/schemas/QuantidadeValor' }
-        pendencias:
-          type: object
-          properties:
-            total: { type: number }
-            quantidade: { type: integer }
-            por_origem:
-              type: object
-              properties:
-                pedidos: { $ref: '#/components/schemas/QuantidadeValor' }
-                restaurantes: { $ref: '#/components/schemas/QuantidadeValor' }
-                manual: { $ref: '#/components/schemas/QuantidadeValor' }
-        despesas: { $ref: '#/components/schemas/QuantidadeValor' }
-        saldo_periodo: { type: number, description: Recebimentos − despesas do período }
-        estoque:
-          type: object
-          properties:
-            total_unidades: { type: integer }
-            produtos:
-              type: array
-              items:
-                type: object
-                properties: { id: { type: integer }, nome: { type: string }, quantidade_disponivel: { type: integer } }
-        pedidos_por_status:
-          type: object
-          additionalProperties: { type: integer }
-          example: { solicitado: 2, confirmado: 1, em_producao: 0, pronto: 0, entregue: 5, cancelado: 1 }
-    QuantidadeValor:
-      type: object
-      properties:
-        quantidade: { type: integer }
-        valor: { type: number }
+        id:
+          type: integer
+        nome:
+          type: string
+        email:
+          type: string

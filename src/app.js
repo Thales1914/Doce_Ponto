@@ -9,7 +9,6 @@ const app = express();
 
 if (config.trustProxy) app.set('trust proxy', config.trustProxy === 'true' ? 1 : config.trustProxy);
 
-// upgrade-insecure-requests desligado: quebraria o Swagger UI quando a API é servida via HTTP (dev/rede interna)
 app.use(
   helmet({
     contentSecurityPolicy: { useDefaults: true, directives: { 'upgrade-insecure-requests': null } },

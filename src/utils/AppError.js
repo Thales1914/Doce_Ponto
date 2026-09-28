@@ -13,9 +13,6 @@ class AppError extends Error {
   static unauthorized(mensagem = 'Não autenticado.') {
     return new AppError(401, 'NAO_AUTENTICADO', mensagem);
   }
-  static notFound(mensagem = 'Recurso não encontrado.') {
-    return new AppError(404, 'NAO_ENCONTRADO', mensagem);
-  }
   static conflict(mensagem, codigo = 'CONFLITO') {
     return new AppError(409, codigo, mensagem);
   }
