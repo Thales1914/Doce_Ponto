@@ -1,3 +1,10 @@
 node_modules
 .env
+.env.*
+!.env.example
 npm-debug.log*
+
+# Documentos e evidências ficam apenas no ambiente local.
+/README.md
+/docs/
+/*.docx
