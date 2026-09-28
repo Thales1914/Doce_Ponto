@@ -1,9 +1,10 @@
 const bcrypt = require('bcryptjs');
-const { pool } = require('../db/pool');
+const { pool, withTransaction } = require('../db/pool');
 const config = require('../config/env');
 const AppError = require('../utils/AppError');
 const adminModel = require('../models/adminModel');
-const { signToken } = require('../middlewares/auth');
+const { signToken } = require('../utils/jwt');
+const { initialAdmin } = require('../validators/authSchemas');
 
 // Hash descartável para gastar o mesmo tempo quando o e-mail não existe (evita enumeração por tempo de resposta)
 const DUMMY_HASH = bcrypt.hashSync('senha-inexistente', 10);
@@ -28,11 +29,19 @@ async function getProfile(id) {
 
 /** Cria a administradora inicial a partir do .env se ainda não houver nenhuma. */
 async function ensureInitialAdmin() {
-  const { nome, email, senha } = config.admin;
-  if (!email || !senha) return;
-  if (await adminModel.count(pool)) return;
-  await adminModel.create(pool, { nome, email, senhaHash: await bcrypt.hash(senha, 10) });
-  console.log(`Administradora inicial criada: ${email}`);
+  await withTransaction(async (client) => {
+    // Serializa o primeiro cadastro quando mais de uma instância inicia juntas.
+    await client.query('SELECT pg_advisory_xact_lock($1)', [727002]);
+    if (await adminModel.count(client)) return;
+
+    const result = initialAdmin.safeParse(config.admin);
+    if (!result.success) {
+      throw new Error('Configure ADMIN_NOME, ADMIN_EMAIL e ADMIN_SENHA válidos para criar a administradora inicial (senha: mínimo 8 caracteres, máximo 72 bytes).');
+    }
+    const { nome, email, senha } = result.data;
+    await adminModel.create(client, { nome, email, senhaHash: await bcrypt.hash(senha, 10) });
+    console.log('Administradora inicial criada.');
+  });
 }
 
 module.exports = { login, getProfile, ensureInitialAdmin };
